@@ -24,16 +24,22 @@ mfoffset = 0
 buf = madfile.read()
 sample_range = float(sample_max - sample_min)
 frames_per_pixel = frame_count / float(image_width)
+frames_per_pixel_int = int(frames_per_pixel)
 
 image = Image.new("RGBA", (image_width, image_height), (255, 255, 255, 0))
 draw = ImageDraw.Draw(image)
+
+image_height_m1 = image_height - 1
+
+cheat = 500
 
 # for each pixel
 x = 0
 while x < image_width:
     # range of frames that fit in this pixel
     start = int(x * frames_per_pixel)
-    end = int((x+1) * frames_per_pixel)
+    #end = start+frames_per_pixel_int
+    end = start+cheat
     
     # get the min and max of this range
     min = sample_max
@@ -41,7 +47,8 @@ while x < image_width:
     # for each frame from start to end
     i = start
     while i < end:
-        while i * frame_size >= mfoffset + len(buf):
+        tmp_offset = i * frame_size
+        while tmp_offset >= mfoffset + len(buf):
             buf = madfile.read()
             if buf is None:
                 break
@@ -49,10 +56,10 @@ while x < image_width:
         if buf is None:
             break
 
-        offset = i * frame_size - mfoffset
+        offset = tmp_offset - mfoffset
         vals = struct.unpack("hh", buf[offset:offset+frame_size])
         # average the channels
-        value = (vals[0] + vals[1]) / 2.0
+        value = (vals[0] + vals[1]) / 2
 
         if value < min:
             min = value
@@ -65,8 +72,8 @@ while x < image_width:
         break
 
     # translate into y pixel coord
-    y_min = int(round((min - sample_min) / sample_range * (image_height-1)))
-    y_max = int(round((max - sample_min) / sample_range * (image_height-1)))
+    y_min = int((min - sample_min) / sample_range * image_height_m1)
+    y_max = int((max - sample_min) / sample_range * image_height_m1)
 
     # draw
     draw.line(((x, y_min), (x, y_max)), (0,0,0,255))
