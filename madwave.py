@@ -2,7 +2,14 @@ import mad
 import struct
 from PIL import Image, ImageDraw
 
-def create_wave(inmp3file, outpngfile, image_width, image_height, bgcolor=(0, 0, 0, 0), fgcolor=(0, 0, 0, 255)):
+def draw(inmp3file, outpngfile, image_width, image_height, bgcolor=(0, 0, 0, 0), fgcolor=(0, 0, 0, 255), cheat=False):
+    """
+    Draws the waveform of the mp3 file in inmp3file and writes it out to
+    outpngfile.
+
+    cheat is a speedhack that will result in a lower quality image but
+    approximately 10x faster rendering.
+    """
     madfile = mad.MadFile(inmp3file)
     # calculations
     channel_count = madfile.mode()
@@ -19,24 +26,22 @@ def create_wave(inmp3file, outpngfile, image_width, image_height, bgcolor=(0, 0,
     buf = madfile.read()
     sample_range = float(sample_max - sample_min)
     frames_per_pixel = frame_count / float(image_width)
-    frames_per_pixel_int = int(frames_per_pixel)
+    frames_to_see = int(frames_per_pixel)
+    # speed hack
+    if cheat:
+        frames_to_see = 500
 
     image = Image.new("RGBA", (image_width, image_height), bgcolor)
     draw = ImageDraw.Draw(image)
 
     image_height_m1 = image_height - 1
 
-    cheat = 500
-
     # for each pixel
     x = 0
     while x < image_width:
         # range of frames that fit in this pixel
         start = int(x * frames_per_pixel)
-        # ideally:
-        #end = start+frames_per_pixel_int
-        # fast:
-        end = start+cheat
+        end = start+frames_to_see
         
         # get the min and max of this range
         min = sample_max
