@@ -1,9 +1,12 @@
 #include "Python.h"
 
 #include <stdio.h>
-#include <sndfile.h>
 #include <string.h>
 #include <limits.h>
+
+#include <strings.h>
+#include <mpg123.h> // has to be before Python.h for some reason
+#include <sndfile.h>
 
 #include <wand/MagickWand.h>
 
@@ -38,24 +41,105 @@ cwaveform_draw(self, args, keywds)
         return NULL;
     }
 
-    // open the file
+    // try libsndfile, then libmpg123, then give up
+    int libToUse = 0; // 0 - sndfile, 1 - mpg123
+
+    int frameCount = -1;
+    int channelCount = -1;
+    float sampleMin;
+    float sampleMax;
+
+    // libsndfile variables
     SF_INFO sfInfo;
+    int * sfFrames = NULL;
+
+    // mpg123 variables
+    mpg123_handle * mh = NULL;
+
+    // try libsndfile
     memset(&sfInfo, 0, sizeof(SF_INFO));
-    SNDFILE * file = sf_open(inAudioFile, SFM_READ, &sfInfo);
-    if (file == NULL) {
-        PyErr_SetString(PyExc_IOError, "Error reading the audio file.");
-        return NULL;
+    SNDFILE * sfFile = sf_open(inAudioFile, SFM_READ, &sfInfo);
+    if (sfFile == NULL) {
+        // sndfile no good. let's try mpg123.
+        int err = mpg123_init();
+        int encoding = 0;
+        long rate = 0;
+        if (err != MPG123_OK || (mh = mpg123_new(NULL, &err)) == NULL
+            // let mpg123 work with thefile, that excludes MPG123_NEED_MORE
+            // messages.
+            || mpg123_open(mh, inAudioFile) != MPG123_OK
+            // peek into the track and get first output format.
+            || mpg123_getformat(mh, &rate, &channelCount, &encoding)
+                != MPG123_OK)
+        {
+            mpg123_close(mh);
+            mpg123_delete(mh);
+            mpg123_exit();
+            PyErr_SetString(PyExc_IOError, "Unrecognized audio format.");
+            return NULL;
+        }
+
+        mpg123_format_none(mh);
+        mpg123_format(mh, rate, channelCount, encoding);
+        
+        // mpg123 is good. compute stuff
+        libToUse = 1;
+        int sampleSize = 2;
+        int frameSize = sampleSize * channelCount;
+        
+        printf("rate: %i\n", (int)rate);
+        /*
+        // this is an estimate, so we need to be careful not to trust this
+        // number exactly.
+        float totalSeconds = audioByteCount / (lameInfo.bitrate * 1000 / 8.0f);
+        int byteCount = (int)(totalSeconds * lameInfo.samplerate * frameSize);
+
+        frameCount = byteCount / frameSize;
+        */
+
+        sampleMin = (float)SHRT_MIN;
+        sampleMax = (float)SHRT_MAX;
+
+        //printf("Got header data.\n\ntotal sec: %f\nbitrate: %i\n"
+        //    "frame count:%i\nsample rate:%i\n", totalSeconds,
+        //    lameInfo.bitrate, frameCount, lameInfo.samplerate);
+    } else {
+        // sndfile is good. compute stuff
+        frameCount = sfInfo.frames;
+        channelCount = sfInfo.channels;
+
+        sampleMin = (float)INT_MIN;
+        sampleMax = (float)INT_MAX;
     }
+    float sampleRange = (sampleMax - sampleMin);
 
     // draw the wave
-    float framesPerPixel = sfInfo.frames / ((float)imageWidth);
+    float framesPerPixel = frameCount / ((float)imageWidth);
     int framesToSee = (int)framesPerPixel;
     // speed hack
+    const int speedHackFrames = 500;
     if (cheat) {
-        if (framesToSee > 500)
-            framesToSee = 500;
+        if (framesToSee > speedHackFrames)
+            framesToSee = speedHackFrames;
     }
-    int framesTimesChannels = framesToSee * sfInfo.channels;
+
+    // allocate memory to read from library
+    if (libToUse == 0) {
+        // libsndfile
+        sfFrames = (int *) malloc(sizeof(int) * channelCount * framesToSee);
+        if (sfFrames == NULL) {
+            sf_close(sfFile);
+            PyErr_SetString(PyExc_MemoryError, "Out of memory.");
+            return NULL;
+        }
+    } else if (libToUse == 1) {
+        // libmpg123
+        mpg123_close(mh);
+        mpg123_delete(mh);
+        mpg123_exit();
+    }
+
+    int framesTimesChannels = framesToSee * channelCount;
 
     // image magick crap
     MagickWandGenesis();
@@ -86,41 +170,36 @@ cwaveform_draw(self, args, keywds)
     DrawSetOpacity(draw, fgColorAlpha / (double)UCHAR_MAX);
     
     // for each pixel
-    int * frames = (int *) malloc(sizeof(int) * sfInfo.channels * framesToSee);
-    if (frames == NULL) {
-        sf_close(file);
-        PyErr_SetString(PyExc_MemoryError, "Out of memory.");
-        return NULL;
-    }
-
-    const float sampleMin = (float)INT_MIN;
-    const float sampleMax = (float)INT_MAX;
-    float sampleRange = (sampleMax - sampleMin);
     int x;
     for (x=0; x<imageWidth; ++x) {
         // range of frames that fit in this pixel
         int start = x * framesPerPixel;
 
         // get the min and max of this range
-        sf_seek(file, start, SEEK_SET);
-        sf_readf_int(file, frames, framesToSee);
         float min = sampleMax;
         float max = sampleMin;
-        // for each frame from start to end
-        int i;
-        for (i=0; i<framesTimesChannels; i+=sfInfo.channels) {
-            // average the channels
-            float value = 0;
-            int c;
-            for (c=0; c<sfInfo.channels; ++c)
-                value += frames[i+c];
-            value /= sfInfo.channels;
-            
-            // keep track of max/min
-            if (value < min)
-                min = value;
-            if (value > max)
-                max = value;
+        if (libToUse == 0) { // sndfile
+            sf_seek(sfFile, start, SEEK_SET);
+            sf_readf_int(sfFile, sfFrames, framesToSee);
+
+            // for each frame from start to end
+            int i;
+            for (i=0; i<framesTimesChannels; i+=channelCount) {
+                // average the channels
+                float value = 0;
+                int c;
+                for (c=0; c<channelCount; ++c)
+                    value += sfFrames[i+c];
+                value /= channelCount;
+                
+                // keep track of max/min
+                if (value < min)
+                    min = value;
+                if (value > max)
+                    max = value;
+            }
+        } else if (libToUse == 1) { // libmpg123
+            // TODO
         }
         // translate into y pixel coord
         int yMin = (int)((min - sampleMin) / sampleRange * (imageHeight-1));
@@ -140,9 +219,16 @@ cwaveform_draw(self, args, keywds)
     DestroyPixelWand(fgPixWand);
     wand = DestroyMagickWand(wand);
     MagickWandTerminus();
-    free(frames);
-    sf_close(file);
-    
+
+    if (libToUse == 0) {
+        // libsndfile
+        free(sfFrames);
+        sf_close(sfFile);
+    } else if (libToUse == 1) {
+        // libmpg123
+        // TODO
+    }
+
     // no return value
     Py_INCREF(Py_None);
     return Py_None;

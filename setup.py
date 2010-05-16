@@ -1,6 +1,12 @@
 from distutils.core import setup, Extension
 import subprocess
 
+# ---- edit these variables to configure -----
+mpg123_include_dir = '/usr/include/'
+mpg123_libs = 'mpg123'
+mpg123_lib_dir = '/usr/lib'
+# --------------------------------------------
+
 p = subprocess.Popen(['MagickWand-config', '--cflags'], stdout=subprocess.PIPE)
 extra_compile_args = p.communicate()[0].strip().split()
 
@@ -13,9 +19,10 @@ cwaveform = Extension(
         'cwaveformmodule.c',
     ],
     define_macros = [],
-    include_dirs=[],
-    library_dirs=[],
-    libraries=['sndfile'],
+    undef_macros = [],
+    include_dirs=mpg123_include_dir.split(),
+    library_dirs=[mpg123_lib_dir],
+    libraries=['sndfile'] + mpg123_libs.split(),
     extra_compile_args=extra_compile_args,
     extra_link_args=extra_link_args,
 )
