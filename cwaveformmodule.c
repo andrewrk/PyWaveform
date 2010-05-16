@@ -59,29 +59,31 @@ cwaveform_draw(self, args, keywds)
 
     // image magick crap
     MagickWandGenesis();
+    MagickWand * wand = NewMagickWand();
+    DrawingWand * draw = NewDrawingWand();
+
     // create colors
     PixelWand * bgPixWand = NewPixelWand();
+    PixelWand * fgPixWand = NewPixelWand();
+
     PixelSetRed(bgPixWand, bgColorRed / (double)UCHAR_MAX);
     PixelSetGreen(bgPixWand, bgColorGreen / (double)UCHAR_MAX);
     PixelSetBlue(bgPixWand, bgColorBlue / (double)UCHAR_MAX);
     PixelSetAlpha(bgPixWand, bgColorAlpha / (double)UCHAR_MAX);
 
-    PixelWand * fgPixWand = NewPixelWand();
     PixelSetRed(fgPixWand, fgColorRed / (double)UCHAR_MAX);
     PixelSetGreen(fgPixWand, fgColorGreen / (double)UCHAR_MAX);
     PixelSetBlue(fgPixWand, fgColorBlue / (double)UCHAR_MAX);
     PixelSetAlpha(fgPixWand, fgColorAlpha / (double)UCHAR_MAX);
-    // create drawing wand
-    DrawingWand * draw = NewDrawingWand();
-    DrawSetStrokeColor(draw, fgPixWand);
-    DrawSetStrokeOpacity(draw, fgColorAlpha / (double)UCHAR_MAX);
-    // create an image magick image
-    MagickWand * wand = NewMagickWand();
-    MagickSetImageFormat(wand, "PNG");
-    MagickSetImageOpacity(wand, bgColorAlpha / (double)UCHAR_MAX);
+
     // create image
-    MagickBooleanType success = MagickNewImage(wand, imageWidth, imageHeight,
-        bgPixWand);
+    MagickNewImage(wand, imageWidth, imageHeight, bgPixWand);
+    MagickSetImageOpacity(wand, bgColorAlpha / (double)UCHAR_MAX);
+
+    // create drawing wand
+    DrawSetStrokeColor(draw, fgPixWand);
+    DrawSetStrokeOpacity(draw, 1);
+    DrawSetOpacity(draw, fgColorAlpha / (double)UCHAR_MAX);
     
     // for each pixel
     int * frames = (int *) malloc(sizeof(int) * sfInfo.channels * framesToSee);
@@ -129,6 +131,7 @@ cwaveform_draw(self, args, keywds)
         
     }
     // save the image
+    MagickDrawImage(wand, draw);
     MagickWriteImage(wand, outImageFile);
 
     // clean up
