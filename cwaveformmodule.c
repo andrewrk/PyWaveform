@@ -5,6 +5,8 @@
 #include <string.h>
 #include <limits.h>
 
+#include <wand/MagickWand.h>
+
 static PyObject *
 cwaveform_draw(self, args, keywds)
     PyObject *self; /* Not used */
@@ -16,14 +18,14 @@ cwaveform_draw(self, args, keywds)
     char * outImageFile;
     long imageWidth;
     long imageHeight;
-    char bgColorRed;
-    char bgColorGreen;
-    char bgColorBlue;
-    char bgColorAlpha;
-    char fgColorRed;
-    char fgColorGreen;
-    char fgColorBlue;
-    char fgColorAlpha;
+    unsigned char bgColorRed;
+    unsigned char bgColorGreen;
+    unsigned char bgColorBlue;
+    unsigned char bgColorAlpha;
+    unsigned char fgColorRed;
+    unsigned char fgColorGreen;
+    unsigned char fgColorBlue;
+    unsigned char fgColorAlpha;
     char cheat; //bool
 
     // get arguments
@@ -54,6 +56,30 @@ cwaveform_draw(self, args, keywds)
             framesToSee = 500;
     }
     int pixelFramesByteSize = framesToSee * sfInfo.channels;
+
+    // create an image magick image
+    MagickWandGenesis();
+    MagickWand * wand = NewMagickWand();
+    MagickSetImageFormat(wand, "PNG");
+    // create colors
+    PixelWand * bgPixWand = NewPixelWand();
+    PixelSetRed(bgPixWand, bgColorRed / (double)UCHAR_MAX);
+    PixelSetGreen(bgPixWand, bgColorGreen / (double)UCHAR_MAX);
+    PixelSetBlue(bgPixWand, bgColorBlue / (double)UCHAR_MAX);
+    PixelSetAlpha(bgPixWand, bgColorAlpha / (double)UCHAR_MAX);
+
+    PixelWand * fgPixWand = NewPixelWand();
+    PixelSetRed(fgPixWand, fgColorRed / (double)UCHAR_MAX);
+    PixelSetGreen(fgPixWand, fgColorGreen / (double)UCHAR_MAX);
+    PixelSetBlue(fgPixWand, fgColorBlue / (double)UCHAR_MAX);
+    PixelSetAlpha(fgPixWand, fgColorAlpha / (double)UCHAR_MAX);
+    // create drawing wand
+    DrawingWand * draw = NewDrawingWand();
+    DrawSetStrokeColor(draw, fgPixWand);
+    DrawSetStrokeWidth(draw, 1);
+    // create image
+    MagickBooleanType success = MagickNewImage(wand, imageWidth, imageHeight,
+        bgPixWand);
     
     // for each pixel
     int * frames = (int *) malloc(sizeof(int) * sfInfo.channels * framesToSee);
@@ -93,15 +119,22 @@ cwaveform_draw(self, args, keywds)
                 max = value;
         }
         // translate into y pixel coord
-        int y_min = (int)((min - sampleMin) / sampleRange * imageHeight);
-        int y_max = (int)((max - sampleMin) / sampleRange * imageHeight);
+        int y_min = (int)((min - sampleMin) / sampleRange * (imageHeight-1));
+        int y_max = (int)((max - sampleMin) / sampleRange * (imageHeight-1));
 
         // draw
-        // TODO: imagemagick
+        DrawLine(draw, x, y_min, x, y_max);
+        
     }
-    // TODO: save the image
+    // save the image
+    MagickWriteImage(wand, outImageFile);
 
     // clean up
+    draw = DestroyDrawingWand(draw);
+    DestroyPixelWand(bgPixWand);
+    DestroyPixelWand(fgPixWand);
+    wand = DestroyMagickWand(wand);
+    MagickWandTerminus();
     free(frames);
     sf_close(file);
     
@@ -124,7 +157,7 @@ static PyMethodDef cwaveform_methods[] = {
 DL_EXPORT(void)
 initcwaveform()
 {
-    PyObject *m, *d;
+    PyObject *m;
 
     /* Create the module and add the functions */
     m = Py_InitModule("cwaveform", cwaveform_methods);

@@ -1,4 +1,11 @@
 from distutils.core import setup, Extension
+import subprocess
+
+p = subprocess.Popen(['MagickWand-config', '--cflags'], stdout=subprocess.PIPE)
+extra_compile_args = p.communicate()[0].strip().split()
+
+p = subprocess.Popen(['MagickWand-config', '--ldflags', '--libs'], stdout=subprocess.PIPE)
+extra_link_args = p.communicate()[0].strip().split()
 
 cwaveform = Extension(
     'cwaveformmodule',
@@ -9,6 +16,8 @@ cwaveform = Extension(
     include_dirs=[],
     library_dirs=[],
     libraries=['sndfile'],
+    extra_compile_args=extra_compile_args,
+    extra_link_args=extra_link_args,
 )
 
 setup(
