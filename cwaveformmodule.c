@@ -1,3 +1,4 @@
+#include <mpg123.h> // has to be before Python.h for some reason
 #include "Python.h"
 
 #include <stdio.h>
@@ -5,7 +6,6 @@
 #include <limits.h>
 
 #include <strings.h>
-#include <mpg123.h> // has to be before Python.h for some reason
 #include <sndfile.h>
 
 #include <wand/MagickWand.h>
@@ -46,6 +46,7 @@ cwaveform_draw(self, args, keywds)
 
     int frameCount = -1;
     int channelCount = -1;
+    int frameSize = -1;
     float sampleMin;
     float sampleMax;
 
@@ -54,6 +55,7 @@ cwaveform_draw(self, args, keywds)
     int * sfFrames = NULL;
 
     // mpg123 variables
+    short * mp3Frames = NULL;
     mpg123_handle * mh = NULL;
 
     // try libsndfile
@@ -84,25 +86,21 @@ cwaveform_draw(self, args, keywds)
         
         // mpg123 is good. compute stuff
         libToUse = 1;
+        mpg123_scan(mh);
         int sampleSize = 2;
-        int frameSize = sampleSize * channelCount;
-        
-        printf("rate: %i\n", (int)rate);
-        /*
-        // this is an estimate, so we need to be careful not to trust this
-        // number exactly.
-        float totalSeconds = audioByteCount / (lameInfo.bitrate * 1000 / 8.0f);
-        int byteCount = (int)(totalSeconds * lameInfo.samplerate * frameSize);
+        frameSize = sampleSize * channelCount;
 
-        frameCount = byteCount / frameSize;
-        */
+        int sampleCount = mpg123_length(mh);
+        frameCount = sampleCount / channelCount;
+
+        float totalSeconds = sampleCount * (1.0f / rate);
 
         sampleMin = (float)SHRT_MIN;
         sampleMax = (float)SHRT_MAX;
 
-        //printf("Got header data.\n\ntotal sec: %f\nbitrate: %i\n"
-        //    "frame count:%i\nsample rate:%i\n", totalSeconds,
-        //    lameInfo.bitrate, frameCount, lameInfo.samplerate);
+        printf("Got header data.\n\ntotal sec: %f\nchannelCount: %i\n"
+            "frame count:%i\nsample rate:%i\n", totalSeconds,
+            (int)channelCount, (int)frameCount, (int)rate);
     } else {
         // sndfile is good. compute stuff
         frameCount = sfInfo.frames;
@@ -124,16 +122,51 @@ cwaveform_draw(self, args, keywds)
     }
 
     // allocate memory to read from library
-    if (libToUse == 0) {
-        // libsndfile
+    if (libToUse == 0) { // libsndfile
         sfFrames = (int *) malloc(sizeof(int) * channelCount * framesToSee);
         if (sfFrames == NULL) {
             sf_close(sfFile);
             PyErr_SetString(PyExc_MemoryError, "Out of memory.");
             return NULL;
         }
-    } else if (libToUse == 1) {
-        // libmpg123
+    } else if (libToUse == 1) { // libmpg123
+        // decode everything
+        size_t done = 0;
+        int safetyPad = 10000000;
+        int buffer_size = frameCount * frameSize + safetyPad;
+        mp3Frames = malloc(buffer_size);
+        if (mp3Frames == NULL) {
+            mpg123_close(mh);
+            mpg123_delete(mh);
+            mpg123_exit();
+            PyErr_SetString(PyExc_MemoryError, "Out of memory.");
+            return NULL;
+        }
+        int err = mpg123_read(mh, (unsigned char *)mp3Frames,
+            buffer_size, &done);
+        if (err != MPG123_DONE) {
+            fprintf(stderr, "Warning: Decoding ended prematurely because: %s\n",
+                err == MPG123_ERR ? mpg123_strerror(mh) :
+                mpg123_plain_strerror(err) );
+            mpg123_close(mh);
+            mpg123_delete(mh);
+            mpg123_exit();
+            PyErr_SetString(PyExc_IOError, "Error decoding MP3.");
+            return NULL;
+        }
+
+        // recalculate variables now that we have an accurate frameCount
+        frameCount = done / frameSize;
+        framesPerPixel = frameCount / ((float)imageWidth);
+        framesToSee = (int)framesPerPixel;
+        // speed hack
+        if (cheat) {
+            if (framesToSee > speedHackFrames)
+                framesToSee = speedHackFrames;
+        }
+        printf("corrected frame count: %i\n", frameCount);
+
+        // close down mpg123, we're done with it
         mpg123_close(mh);
         mpg123_delete(mh);
         mpg123_exit();
@@ -170,6 +203,7 @@ cwaveform_draw(self, args, keywds)
     DrawSetOpacity(draw, fgColorAlpha / (double)UCHAR_MAX);
     
     // for each pixel
+    int imageBoundY = imageHeight-1;
     int x;
     for (x=0; x<imageWidth; ++x) {
         // range of frames that fit in this pixel
@@ -199,11 +233,28 @@ cwaveform_draw(self, args, keywds)
                     max = value;
             }
         } else if (libToUse == 1) { // libmpg123
-            // TODO
+            // for each frame from start to end
+            int i;
+            for (i=start*channelCount; i<start*channelCount+framesTimesChannels; i+=channelCount) {
+                // average the channels
+                float value = 0;
+                int c;
+                for (c=0; c<channelCount; ++c)
+                    value += mp3Frames[i+c];
+                value /= channelCount;
+                
+                // keep track of max/min
+                if (value < min)
+                    min = value;
+                if (value > max)
+                    max = value;
+            }
         }
         // translate into y pixel coord
-        int yMin = (int)((min - sampleMin) / sampleRange * (imageHeight-1));
-        int yMax = (int)((max - sampleMin) / sampleRange * (imageHeight-1));
+        int yMin = (int)((min - sampleMin) / sampleRange * imageBoundY);
+        int yMax = (int)((max - sampleMin) / sampleRange * imageBoundY);
+
+        //printf("(%f, %f) -> (%i, %i)\n", min, max, yMin, yMax);
 
         // draw
         DrawLine(draw, x, yMin, x, yMax);
@@ -226,7 +277,7 @@ cwaveform_draw(self, args, keywds)
         sf_close(sfFile);
     } else if (libToUse == 1) {
         // libmpg123
-        // TODO
+        free(mp3Frames);
     }
 
     // no return value
