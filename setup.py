@@ -4,7 +4,11 @@ cwaveform = Extension(
     'cwaveformmodule',
     sources = [
         'cwaveformmodule.c',
-    ]
+    ],
+    define_macros = [],
+    include_dirs=[],
+    library_dirs=[],
+    libraries=['sndfile'],
 )
 
 setup(
