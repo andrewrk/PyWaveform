@@ -55,12 +55,10 @@ cwaveform_draw(self, args, keywds)
         if (framesToSee > 500)
             framesToSee = 500;
     }
-    int pixelFramesByteSize = framesToSee * sfInfo.channels;
+    int framesTimesChannels = framesToSee * sfInfo.channels;
 
-    // create an image magick image
+    // image magick crap
     MagickWandGenesis();
-    MagickWand * wand = NewMagickWand();
-    MagickSetImageFormat(wand, "PNG");
     // create colors
     PixelWand * bgPixWand = NewPixelWand();
     PixelSetRed(bgPixWand, bgColorRed / (double)UCHAR_MAX);
@@ -76,7 +74,11 @@ cwaveform_draw(self, args, keywds)
     // create drawing wand
     DrawingWand * draw = NewDrawingWand();
     DrawSetStrokeColor(draw, fgPixWand);
-    DrawSetStrokeWidth(draw, 1);
+    DrawSetStrokeOpacity(draw, fgColorAlpha / (double)UCHAR_MAX);
+    // create an image magick image
+    MagickWand * wand = NewMagickWand();
+    MagickSetImageFormat(wand, "PNG");
+    MagickSetImageOpacity(wand, bgColorAlpha / (double)UCHAR_MAX);
     // create image
     MagickBooleanType success = MagickNewImage(wand, imageWidth, imageHeight,
         bgPixWand);
@@ -89,8 +91,8 @@ cwaveform_draw(self, args, keywds)
         return NULL;
     }
 
-    float sampleMin = INT_MIN;
-    float sampleMax = INT_MAX;
+    const float sampleMin = (float)INT_MIN;
+    const float sampleMax = (float)INT_MAX;
     float sampleRange = (sampleMax - sampleMin);
     int x;
     for (x=0; x<imageWidth; ++x) {
@@ -100,11 +102,11 @@ cwaveform_draw(self, args, keywds)
         // get the min and max of this range
         sf_seek(file, start, SEEK_SET);
         sf_readf_int(file, frames, framesToSee);
-        float min = sampleMin;
-        float max = sampleMax;
+        float min = sampleMax;
+        float max = sampleMin;
         // for each frame from start to end
         int i;
-        for (i=0; i<pixelFramesByteSize; i+=sfInfo.channels) {
+        for (i=0; i<framesTimesChannels; i+=sfInfo.channels) {
             // average the channels
             float value = 0;
             int c;
@@ -119,11 +121,11 @@ cwaveform_draw(self, args, keywds)
                 max = value;
         }
         // translate into y pixel coord
-        int y_min = (int)((min - sampleMin) / sampleRange * (imageHeight-1));
-        int y_max = (int)((max - sampleMin) / sampleRange * (imageHeight-1));
+        int yMin = (int)((min - sampleMin) / sampleRange * (imageHeight-1));
+        int yMax = (int)((max - sampleMin) / sampleRange * (imageHeight-1));
 
         // draw
-        DrawLine(draw, x, y_min, x, y_max);
+        DrawLine(draw, x, yMin, x, yMax);
         
     }
     // save the image
