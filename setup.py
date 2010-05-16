@@ -6,6 +6,9 @@ mpg123_include_dir = '/usr/include/'
 mpg123_libs = 'mpg123'
 mpg123_lib_dir = '/usr/lib'
 # --------------------------------------------
+# note: it may be necessary to swap #include <Python.h> and #include <mpg123.h>
+#       depending on your architecture
+# --------------------------------------------
 
 p = subprocess.Popen(['MagickWand-config', '--cflags'], stdout=subprocess.PIPE)
 extra_compile_args = p.communicate()[0].strip().split()

@@ -1,0 +1,20 @@
+waveform python module. Synopsis:
+
+import waveform
+
+# quickly draw the waveform of an mp3 file to 
+waveform.draw("infile.mp3", "outfile.png", (800, 100), bgColor=(0,0,0,0),
+    fgColor=(0,0,128,255))
+
+
+Supported audio formats:
+libsndfile + libmad123, e.g.:
+wav
+aiff
+au
+ogg
+flac
+mp3
+
+Supported graphic formats:
+pretty much anything as far as I know. ImageMagick is pretty hefty.
