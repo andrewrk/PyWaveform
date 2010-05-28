@@ -1,10 +1,20 @@
 waveform python module. Synopsis:
 
-import waveform
+    import waveform
 
-# quickly draw the waveform of an mp3 file to 
-waveform.draw("infile.mp3", "outfile.png", (800, 100), bgColor=(0,0,0,0),
-    fgColor=(0,0,128,255))
+    # quickly draw the waveform of an mp3 file to a picture
+    waveform.draw("infile.mp3", "outfile.png", (800, 100), bgColor=(0,0,0,0),
+        fgColor=(0,0,128,255))
+
+    # draw using a gradient
+    center_color = (184, 221, 242, 255)
+    outer_color = (19, 117, 205, 255)
+    waveform.draw("infile.mp3", "outfile.png", (800, 100), bgColor=(0,0,0,0),
+        fgGradientCenter=center_color, fgGradientOuter=outer_color)
+
+    # generate the picture extremely quickly at the loss of how
+    # good the image looks
+    waveform.draw("infile.mp3", "outfile.png", (800, 100), cheat=True)
 
 
 Supported audio formats:

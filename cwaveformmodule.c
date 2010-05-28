@@ -27,17 +27,22 @@ cwaveform_draw(self, args, keywds)
     unsigned char bgColorGreen;
     unsigned char bgColorBlue;
     unsigned char bgColorAlpha;
-    unsigned char fgColorRed;
-    unsigned char fgColorGreen;
-    unsigned char fgColorBlue;
-    unsigned char fgColorAlpha;
+    unsigned char fgGradientCenterRed;
+    unsigned char fgGradientCenterGreen;
+    unsigned char fgGradientCenterBlue;
+    unsigned char fgGradientCenterAlpha;
+    unsigned char fgGradientOuterRed;
+    unsigned char fgGradientOuterGreen;
+    unsigned char fgGradientOuterBlue;
+    unsigned char fgGradientOuterAlpha;
     char cheat; //bool
 
     // get arguments
-    if (!PyArg_ParseTuple(args, "ssllbbbbbbbbb",
+    if (!PyArg_ParseTuple(args, "ssllbbbbbbbbbbbbb",
         &inAudioFile, &outImageFile, &imageWidth, &imageHeight,
         &bgColorRed, &bgColorGreen, &bgColorBlue, &bgColorAlpha,
-        &fgColorRed, &fgColorGreen, &fgColorBlue, &fgColorAlpha,
+        &fgGradientCenterRed, &fgGradientCenterGreen, &fgGradientCenterBlue, &fgGradientCenterAlpha,
+        &fgGradientOuterRed, &fgGradientOuterGreen, &fgGradientOuterBlue, &fgGradientOuterAlpha,
         &cheat))
     {
         return NULL;
@@ -131,20 +136,32 @@ cwaveform_draw(self, args, keywds)
     PixelSetBlue(bgPixWand, bgColorBlue / (double)UCHAR_MAX);
     PixelSetAlpha(bgPixWand, bgColorAlpha / (double)UCHAR_MAX);
 
-    PixelSetRed(fgPixWand, fgColorRed / (double)UCHAR_MAX);
-    PixelSetGreen(fgPixWand, fgColorGreen / (double)UCHAR_MAX);
-    PixelSetBlue(fgPixWand, fgColorBlue / (double)UCHAR_MAX);
-    PixelSetAlpha(fgPixWand, fgColorAlpha / (double)UCHAR_MAX);
-
     // create image
     MagickNewImage(wand, imageWidth, imageHeight, bgPixWand);
     MagickSetImageOpacity(wand, bgColorAlpha / (double)UCHAR_MAX);
 
     // create drawing wand
-    DrawSetStrokeColor(draw, fgPixWand);
-    DrawSetStrokeOpacity(draw, 1);
-    DrawSetOpacity(draw, fgColorAlpha / (double)UCHAR_MAX);
-    
+    DrawSetFillColor(draw, fgPixWand);
+    DrawSetFillOpacity(draw, 1);
+
+    // gradient calculations
+    double centerY = imageHeight / 2;
+
+    double centerRed = fgGradientCenterRed / (double) UCHAR_MAX;
+    double centerGreen = fgGradientCenterGreen / (double) UCHAR_MAX;
+    double centerBlue = fgGradientCenterBlue / (double) UCHAR_MAX;
+    double centerAlpha = fgGradientCenterAlpha / (double) UCHAR_MAX;
+
+    double outerRed = fgGradientOuterRed / (double) UCHAR_MAX;
+    double outerGreen = fgGradientOuterGreen / (double) UCHAR_MAX;
+    double outerBlue = fgGradientOuterBlue / (double) UCHAR_MAX;
+    double outerAlpha = fgGradientOuterAlpha / (double) UCHAR_MAX;
+
+    double deltaRed = (outerRed - centerRed) / centerY;
+    double deltaGreen = (outerGreen - centerGreen) / centerY;
+    double deltaBlue = (outerBlue - centerBlue) / centerY;
+    double deltaAlpha = (outerAlpha - centerAlpha) / centerY;
+
     // for each pixel
     int imageBoundY = imageHeight-1;
     int x;
@@ -185,10 +202,36 @@ cwaveform_draw(self, args, keywds)
         int yMin = (int)((min - sampleMin) / sampleRange * imageBoundY);
         int yMax = (int)((max - sampleMin) / sampleRange * imageBoundY);
 
-        //printf("(%f, %f) -> (%i, %i)\n", min, max, yMin, yMax);
+        // draw gradient
+        double fgRed = centerRed;
+        double fgGreen = centerGreen;
+        double fgBlue = centerBlue;
+        double fgAlpha = centerAlpha;
+        double yTop = centerY;
+        double yBottom = centerY;
+        while (yBottom >= yMin || yTop <= yMax) {
+            fgRed += deltaRed;
+            fgGreen += deltaGreen;
+            fgBlue += deltaBlue;
+            fgAlpha += deltaAlpha;
 
-        // draw
-        DrawLine(draw, x, yMin, x, yMax);
+            PixelSetRed(fgPixWand, fgRed);
+            PixelSetGreen(fgPixWand, fgGreen);
+            PixelSetBlue(fgPixWand, fgBlue);
+            PixelSetAlpha(fgPixWand, fgAlpha);
+            DrawSetOpacity(draw, fgAlpha);
+            DrawSetFillColor(draw, fgPixWand);
+
+            if (yBottom >= yMin) {
+                DrawPoint(draw, x, yBottom);
+                --yBottom;
+            }
+            
+            if (yTop <= yMax) {
+                DrawPoint(draw, x, yTop);
+                ++yTop;
+            }
+        }
         
     }
     // save the image
