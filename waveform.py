@@ -1,5 +1,7 @@
 import cwaveform
 
+__version__ = '0.2'
+
 def draw(inAudioFile, outImageFile, (imageWidth, imageHeight), bgColor=(0, 0, 0, 0), fgColor=None, fgGradientCenter=None, fgGradientOuter=None, cheat=False):
     """
     Draws the waveform of inAudioFile to picture file outImageFile.
