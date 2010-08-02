@@ -32,7 +32,7 @@ cwaveform = Extension(
 
 setup(
     name='waveform',
-    version=__import__('waveform').__version__,
+    version='0.3',
     author="Andrew Kelley",
     author_email="superjoe30@gmail.com",
     description='Create an image of the waveform of an audio file.',
