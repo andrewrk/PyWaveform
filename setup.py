@@ -32,7 +32,7 @@ cwaveform = Extension(
 
 setup(
     name='waveform',
-    version='0.3',
+    version='0.4',
     author="Andrew Kelley",
     author_email="superjoe30@gmail.com",
     description='Create an image of the waveform of an audio file.',

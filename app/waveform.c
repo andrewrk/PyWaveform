@@ -17,6 +17,7 @@ int main(int argc, char * argv[]) {
             "fgGradientCenterRed fgGradientCenterGreen fgGradientCenterBlue fgGradientCenterAlpha "
             "fgGradientOuterRed fgGradientOuterGreen fgGradientOuterBlue fgGradientOuterAlpha] "
             "\n", argv[0]);
+        return -1;
     }
 
     // arg list
