@@ -1,6 +1,6 @@
 import cwaveform
 
-__version__ = '0.3'
+__version__ = '0.4'
 
 def draw(inAudioFile, outImageFile, (imageWidth, imageHeight), bgColor=(0, 0, 0, 0), fgColor=None, fgGradientCenter=None, fgGradientOuter=None, cheat=False):
     """
