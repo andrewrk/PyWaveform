@@ -1,5 +1,5 @@
-#include <mpg123.h> // has to be before Python.h for some reason
 #include "Python.h"
+#include <mpg123.h> // has to be before Python.h for some reason
 
 #include <stdio.h>
 #include <string.h>
@@ -11,10 +11,7 @@
 #include <wand/MagickWand.h>
 
 static PyObject *
-cwaveform_draw(self, args, keywds)
-    PyObject *self; /* Not used */
-    PyObject *args;
-    PyObject *keywds;
+cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
 {
     const int speedHackFrames = 500;
 
@@ -265,15 +262,14 @@ cwaveform_draw(self, args, keywds)
 /* List of functions defined in the module */
 
 static PyMethodDef cwaveform_methods[] = {
-    {"draw",        cwaveform_draw,        METH_VARARGS|METH_KEYWORDS},
+    {"draw",        (PyCFunction)cwaveform_draw,        METH_VARARGS|METH_KEYWORDS},
     {NULL,        NULL}        /* sentinel */
 };
 
 
 /* Initialization function for the module (*must* be called initcwaveform) */
 
-DL_EXPORT(void)
-initcwaveform()
+void initcwaveform()
 {
     PyObject *m;
 
