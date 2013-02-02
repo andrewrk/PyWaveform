@@ -1,3 +1,13 @@
+===========================================
+*NOTE* This module is deprecated. What you
+probably want is to use this C program with
+subprocess.Popen:
+
+https://github.com/superjoe30/waveform
+===========================================
+
+
+
 waveform python module. Synopsis:
 
     import waveform
